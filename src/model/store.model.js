@@ -1,0 +1,103 @@
+const mongoose = require("mongoose");
+const { model } = mongoose;
+
+const reviewSchema = new mongoose.Schema(
+  {
+    comment: { type: String },
+    rating: { type: Number, min: 1, max: 5 },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+  },
+  { timestamps: true }
+);
+
+const imageSeoSchema = new mongoose.Schema({
+  description: String,
+  keyword: String
+});
+
+const storeSchema = new mongoose.Schema(
+  {
+    storeName: {
+      type: String,
+      required: true
+    },
+
+    storeUniqueId: {
+      type: String,
+      unique: true
+    },
+
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true
+    },
+
+    images: [
+      {
+        type: String
+      }
+    ],
+
+    address: {
+      area: String,
+      state: String,
+      country: String
+    },
+
+    lat: Number,
+    long: Number,
+
+    contactNo: String,
+    whatsappNo: String,
+
+    email: String,
+    website: String,
+
+    description: String,
+
+    timing: {
+      open: String,
+      close: String
+    },
+
+    timingByDay: {
+      sunday: String,
+      monday: String,
+      tuesday: String,
+      wednesday: String,
+      thursday: String,
+      friday: String,
+      saturday: String
+    },
+
+    gstin: {
+      type: String
+    },
+
+    imageSeo: imageSeoSchema,
+
+    reviews: [reviewSchema],
+
+    isActive: {
+      type: Boolean,
+      default: true
+    },
+
+    isVerify: {
+      type: Boolean,
+      default: false
+    }
+  },
+  { timestamps: true }
+);
+
+storeSchema.pre("save", function () {
+  if (!this.storeUniqueId) {
+    this.storeUniqueId = "STR-" + Date.now();
+  }
+});
+
+const StoreModel = model("Store", storeSchema);
+
+module.exports = StoreModel;
