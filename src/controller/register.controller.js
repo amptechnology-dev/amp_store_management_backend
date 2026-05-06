@@ -105,6 +105,48 @@ const registerAdmin = async (req, res) => {
   }
 };
 
+const registerOwner = async (req, res) => {
+  try {
+    const parsedData = createUserSchema.parse(req.body);
+    const existingEmail = await UserModel.findOne({ email: parsedData.email });
+    if (existingEmail) {
+      return res.status(409).json({
+        message: "Email already in use",
+      });
+    }
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(parsedData.password, salt);
+    const user = new UserModel({
+      ...parsedData,
+      password: hashedPassword,
+      role: "STORE"
+    });
+    await user.save();
+    const userId = user._id;
+    await sendPasswordEmail(parsedData.email, parsedData.password);
+    return res.status(201).json({
+      message: "Store owner registered and verification email sent successfully !",
+      user
+    });
+  } catch (error) {
+    if (error.code === 11000 && error.keyPattern?.email) {
+      return res.status(409).json({
+        message: "Email already in use",
+      });
+    }
+    if (error.name === "ZodError") {
+      return res.status(400).json({
+        message: "Validation failed",
+        errors: error.errors,
+      });
+    }
+    console.error("Store owner registration error:", error);
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
 // Register Store Owner with Store Details
 const registerStoreOwner = async (req, res) => {
   try {
@@ -114,6 +156,7 @@ const registerStoreOwner = async (req, res) => {
       phone,
       password,
       storeName,
+      storeType,
       description,
       contactNo,
       whatsappNo,
@@ -158,6 +201,7 @@ const registerStoreOwner = async (req, res) => {
     const store = await StoreModel.create({
 
       storeName: storeName?.trim(),
+      storeType: storeType?.trim(),
       description: description?.trim(),
 
       contactNo: contactNo?.trim(),
@@ -225,13 +269,13 @@ const registerStoreOwner = async (req, res) => {
 // We create Store Store owner 
 const createUser = async (req, res) => {
   try {
-
     const {
       name,
       email,
       phone,
       password,
       storeName,
+      storeType,
       description,
       contactNo,
       whatsappNo,
@@ -276,6 +320,7 @@ const createUser = async (req, res) => {
     const store = await StoreModel.create({
 
       storeName: storeName?.trim(),
+      storeType: storeType?.trim(),
       description: description?.trim(),
 
       contactNo: contactNo?.trim(),
@@ -339,6 +384,100 @@ const createUser = async (req, res) => {
   }
 };
 
+const createStore = async (req, res) => {
+  try {
+    const {
+      storeName,
+      storeType,
+      description,
+      contactNo,
+      whatsappNo,
+      website,
+      gstin,
+      lat,
+      long,
+    } = req.body;
+
+    const userId = req.user.id;
+
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found"
+      });
+    }
+
+    let images = [];
+
+    if (req.files?.length) {
+      for (const file of req.files) {
+        if (file.fieldname.startsWith("image")) {
+          const url = await uploadSingleImage(file);
+          images.push(url);
+        }
+      }
+    }
+
+    const store = await StoreModel.create({
+      storeName: storeName?.trim(),
+      storeType: storeType?.trim(),
+      description: description?.trim(),
+
+      contactNo: contactNo?.trim(),
+      whatsappNo: whatsappNo?.trim(),
+
+      email: user.email, 
+      website: website?.trim(),
+
+      gstin: gstin?.trim(),
+
+      lat: Number(lat),
+      long: Number(long),
+
+      images,
+
+      address: {
+        area: req.body?.address?.area,
+        state: req.body?.address?.state,
+        country: req.body?.address?.country
+      },
+
+      timing: {
+        open: req.body?.timing?.open,
+        close: req.body?.timing?.close
+      },
+
+      timingByDay: {
+        sunday: req.body?.timingByDay?.sunday,
+        monday: req.body?.timingByDay?.monday,
+        tuesday: req.body?.timingByDay?.tuesday,
+        wednesday: req.body?.timingByDay?.wednesday,
+        thursday: req.body?.timingByDay?.thursday,
+        friday: req.body?.timingByDay?.friday,
+        saturday: req.body?.timingByDay?.saturday
+      },
+
+      imageSeo: req.body.imageSeo,
+
+      userId: userId,
+
+      isVerify: false 
+    });
+
+    return res.status(201).json({
+      message: "Store created successfully",
+      store
+    });
+
+  } catch (error) {
+    console.error("Store creation error:", error);
+
+    return res.status(500).json({
+      message: "Internal server error"
+    });
+  }
+};
+
 
 const allStores = async (req, res) => {
   try {
@@ -354,7 +493,6 @@ const allStores = async (req, res) => {
           storeName: { $regex: search, $options: "i" }
         }
       },
-
       {
         $lookup: {
           from: "users",
@@ -450,6 +588,7 @@ const singleStore = async (req, res) => {
       {
         $project: {
           storeName: 1,
+          storeType: 1,
           storeUniqueId: 1,
           description: 1,
           images: 1,
@@ -565,6 +704,7 @@ const updateStoreAndUser = async (req, res) => {
       {
 
         storeName: req.body.storeName || store.storeName,
+        storeType: req.body.storeType || store.storeType,
         description: req.body.description || store.description,
 
         contactNo: req.body.contactNo || store.contactNo,
@@ -839,5 +979,34 @@ const verifyStoreStatus = async (req, res) => {
   }
 };
 
-module.exports = { registerAdmin, createUser, allStores, singleStore, updateStoreAndUser, deleteStoreAndUser, userBasedStores, publicAllStores, storeWithProducts, registerStoreOwner, verifyStoreStatus };
+const updateStoreRank = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+    const { rank } = req.body;
+
+    const store = await StoreModel.findByIdAndUpdate(
+      storeId,
+      { rank },
+      { new: true }
+    );
+
+    if (!store) {
+      return res.status(404).json({
+        message: "Store not found"
+      });
+    }
+
+    return res.status(200).json({
+      message: "Store rank updated",
+      store
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      message: "Internal server error"
+    });
+  }
+};
+
+module.exports = { registerAdmin, registerOwner, createUser, allStores, singleStore, updateStoreAndUser, deleteStoreAndUser, userBasedStores, publicAllStores, storeWithProducts, registerStoreOwner, verifyStoreStatus,createStore,updateStoreRank };
 

@@ -17,7 +17,6 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-
     role: {
         type: String,
         enum: ["ADMIN", "STORE"],
@@ -28,6 +27,10 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: true
     },
+    isVerified: {
+        type: Boolean,
+        default: false
+    }
 
 }, { timestamps: true });
 

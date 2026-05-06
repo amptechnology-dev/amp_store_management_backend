@@ -21,6 +21,11 @@ const storeSchema = new mongoose.Schema(
       type: String,
       required: true
     },
+    storeType: {
+      type: String,
+      enum: ['Grocery', 'Electronics', 'Clothing', 'Pharmacy', 'Books', 'Furniture', 'Other'],
+      required: true
+    },
 
     storeUniqueId: {
       type: String,
@@ -87,6 +92,10 @@ const storeSchema = new mongoose.Schema(
     isVerify: {
       type: Boolean,
       default: false
+    },
+    rank: {
+      type: Number,
+      default: 3 
     }
   },
   { timestamps: true }
