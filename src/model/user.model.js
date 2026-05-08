@@ -15,12 +15,23 @@ const userSchema = new mongoose.Schema({
 
     password: {
         type: String,
-        required: true
     },
     role: {
         type: String,
-        enum: ["ADMIN", "STORE"],
+        enum: ["ADMIN", "STORE","USER"],
         default: "ADMIN"
+    },
+    googleId: {
+        type: String
+    },
+
+    picture: {
+        type: String
+    },
+    provider: {
+        type: String,
+        enum: ["LOCAL", "GOOGLE"],
+        default: "LOCAL"
     },
 
     isActive: {

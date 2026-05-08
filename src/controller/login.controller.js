@@ -9,85 +9,169 @@ const uploadSingleImage = require("../helper/upload.js");
 const sendPasswordEmail = require("../helper/mail.service.js")
 const transporter = require("../helper/emailtransporter.js")
 const { comparePassword } = require("../helper/comparePassword.js")
+const { OAuth2Client } = require("google-auth-library");
 
+const client = new OAuth2Client(
+    process.env.GOOGLE_CLIENT_ID
+);
+
+const continueWithGoogle = async (req, res) => {
+    try {
+        const { token } = req.body;
+        if (!token) {
+            return res.status(400).json({
+                message: "Google token is required"
+            });
+        }
+        const ticket = await client.verifyIdToken({
+            idToken: token,
+            audience: process.env.GOOGLE_CLIENT_ID
+        });
+
+        const payload = ticket.getPayload();
+
+        const {
+            sub,
+            email,
+            name,
+            picture
+        } = payload;
+
+        let user = await UserModel.findOne({ email });
+
+        if (!user) {
+            user = await UserModel.create({
+                name,
+                email,
+                googleId: sub,
+                picture,
+                provider: "GOOGLE",
+                role: "USER",
+                isVerified: true
+            });
+
+        }
+
+        const accessToken = jwt.sign(
+            {
+                userId: user._id,
+                role: user.role,
+                email: user.email,
+                isActive: user.isActive,
+            },
+            process.env.TOKEN_SECRET,
+            {
+                expiresIn: process.env.TOKEN_EXPIRATION
+            }
+        );
+
+        res.cookie("login-token", accessToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            path: "/",
+            sameSite: "strict",
+        });
+
+        return res.status(200).json({
+            message: "Google authentication successful",
+            token: accessToken,
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                picture: user.picture,
+                isActive: user.isActive
+
+            }
+        });
+    } catch (error) {
+        console.error("Google auth error:", error);
+        return res.status(500).json({
+            message: "Google authentication failed"
+        });
+
+    }
+
+};
 
 const login = async (req, res) => {
-  try {
+    try {
 
-    const parsedData = loginSchema.parse(req.body);
+        const parsedData = loginSchema.parse(req.body);
 
-    const user = await UserModel.findOne({ email: parsedData.email });
+        const user = await UserModel.findOne({ email: parsedData.email });
 
-    if (!user) {
-      return res.status(404).json({
-        message: "User not found"
-      });
-    }
+        if (!user) {
+            return res.status(404).json({
+                message: "User not found"
+            });
+        }
 
-    const isMatch = await comparePassword(parsedData.password, user.password);
+        const isMatch = await comparePassword(parsedData.password, user.password);
 
-    if (!isMatch) {
-      return res.status(401).json({
-        message: "Invalid credentials"
-      });
-    }
+        if (!isMatch) {
+            return res.status(401).json({
+                message: "Invalid credentials"
+            });
+        }
 
-    /* STORE VERIFICATION CHECK */
+        /* STORE VERIFICATION CHECK */
 
-    if (user.role === "STORE") {
+        if (user.role === "STORE") {
 
-      const store = await StoreModel.findOne({ userId: user._id });
+            const store = await StoreModel.findOne({ userId: user._id });
 
-      if (!store || !store.isVerify) {
-        return res.status(403).json({
-          message: "You can't login because your store is not verified. Please contact the admin."
+            if (!store || !store.isVerify) {
+                return res.status(403).json({
+                    message: "You can't login because your store is not verified. Please contact the admin."
+                });
+            }
+
+        }
+
+        /* TOKEN GENERATION */
+
+        const token = jwt.sign(
+            {
+                userId: user._id,
+                role: user.role,
+                email: user.email,
+                phone: user.phone,
+                isActive: user.isActive,
+            },
+            process.env.TOKEN_SECRET,
+            { expiresIn: process.env.TOKEN_EXPIRATION }
+        );
+
+        res.cookie("login-token", token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            path: "/",
+            sameSite: "strict",
         });
-      }
+
+        return res.status(200).json({
+            message: "Login successful",
+            token,
+            user: {
+                id: user._id,
+                email: user.email,
+                role: user.role,
+                phone: user.phone,
+                isActive: user.isActive,
+            },
+        });
+
+    } catch (error) {
+
+        console.error("Login error:", error);
+
+        return res.status(500).json({
+            message: "Error logging in user"
+        });
 
     }
-
-    /* TOKEN GENERATION */
-
-    const token = jwt.sign(
-      {
-        userId: user._id,
-        role: user.role,
-        email: user.email,
-        phone: user.phone,
-        isActive: user.isActive,
-      },
-      process.env.TOKEN_SECRET,
-      { expiresIn: process.env.TOKEN_EXPIRATION }
-    );
-
-    res.cookie("login-token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      sameSite: "strict",
-    });
-
-    return res.status(200).json({
-      message: "Login successful",
-      token,
-      user: {
-        id: user._id,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        isActive: user.isActive,
-      },
-    });
-
-  } catch (error) {
-
-    console.error("Login error:", error);
-
-    return res.status(500).json({
-      message: "Error logging in user"
-    });
-
-  }
 };
 
 const LogOut = async (req, res) => {
@@ -241,5 +325,5 @@ const forgetPassword = async (req, res) => {
 
 }
 
-module.exports = { login, GetProfile, LogOut, resetpasswordlink, forgetPassword, updatePassword };
+module.exports = { login, GetProfile, LogOut, resetpasswordlink, forgetPassword, updatePassword,continueWithGoogle };
 

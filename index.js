@@ -30,10 +30,12 @@ const registerRoutes = require("./src/routes/register.routes.js")
 const loginRoutes = require("./src/routes/login.routes.js")
 const productRoutes = require("./src/routes/product.routes.js")
 const dashboardRoutes = require("./src/routes/dashboard.routes.js")
+const reviewRoutes = require("./src/routes/review.routes.js")
 
 app.use("/api/register", registerRoutes)
 app.use("/api/login", loginRoutes)
 app.use("/api/product", productRoutes)
+app.use("/api/review", reviewRoutes)
 // app.use("/api/dashboard", dashboardRoutes)
 
 const port = process.env.PORT || 8090
