@@ -97,37 +97,21 @@ const continueWithGoogle = async (req, res) => {
 
 const login = async (req, res) => {
     try {
-
         const parsedData = loginSchema.parse(req.body);
-
         const user = await UserModel.findOne({ email: parsedData.email });
-
         if (!user) {
             return res.status(404).json({
                 message: "User not found"
             });
         }
-
+        if (!user.isVerified) {
+            return res.status(401).json({ status: false, message: "Your account is not verified" });
+        }
         const isMatch = await comparePassword(parsedData.password, user.password);
-
         if (!isMatch) {
             return res.status(401).json({
                 message: "Invalid credentials"
             });
-        }
-
-        /* STORE VERIFICATION CHECK */
-
-        if (user.role === "STORE") {
-
-            const store = await StoreModel.findOne({ userId: user._id });
-
-            if (!store || !store.isVerify) {
-                return res.status(403).json({
-                    message: "You can't login because your store is not verified. Please contact the admin."
-                });
-            }
-
         }
 
         /* TOKEN GENERATION */
@@ -325,5 +309,5 @@ const forgetPassword = async (req, res) => {
 
 }
 
-module.exports = { login, GetProfile, LogOut, resetpasswordlink, forgetPassword, updatePassword,continueWithGoogle };
+module.exports = { login, GetProfile, LogOut, resetpasswordlink, forgetPassword, updatePassword, continueWithGoogle };
 

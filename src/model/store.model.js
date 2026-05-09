@@ -23,7 +23,6 @@ const storeSchema = new mongoose.Schema(
     },
     storeType: {
       type: String,
-      enum: ['Grocery', 'Electronics', 'Clothing', 'Pharmacy', 'Books', 'Furniture', 'Other'],
       required: true
     },
 
@@ -93,9 +92,13 @@ const storeSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
-    rank: {
+    isFeatured: {
+      type: Boolean,
+      default: false
+    },
+    viewCount: {
       type: Number,
-      default: 3 
+      default: 0
     }
   },
   { timestamps: true }

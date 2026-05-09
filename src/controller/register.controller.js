@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const UserModel = require("../model/user.model.js")
 const StoreModel = require("../model/store.model.js")
+const StoreViewModel = require("../model/StoreViewModel.js");
 const ProductModel = require("../model/product.model.js");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -10,6 +11,8 @@ const uploadSingleImage = require("../helper/upload.js");
 const sendPasswordEmail = require("../helper/mail.service.js")
 const sendStoreVerifyEmail = require("../helper/sendStoreVerifyEmail");
 const { sendPasswordSMS } = require("../helper/sendPasswordSMS.js");
+const sendEmailVerificationOTP = require('../helper/sendEmailVerificationOTP.js');
+const EmailVerifyModel = require('../model/otpverify.js')
 
 
 const registerAdmin = async (req, res) => {
@@ -123,7 +126,7 @@ const registerOwner = async (req, res) => {
     });
     await user.save();
     const userId = user._id;
-    await sendPasswordEmail(parsedData.email, parsedData.password);
+    sendEmailVerificationOTP(req, user)
     return res.status(201).json({
       message: "Store owner registered and verification email sent successfully !",
       user
@@ -146,6 +149,43 @@ const registerOwner = async (req, res) => {
     });
   }
 };
+
+const verifyEmailOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ status: false, message: "All fields are required" });
+    }
+    const existingUser = await UserModel.findOne({ email });
+    if (!existingUser) {
+      return res.status(404).json({ status: "failed", message: "Email doesn't exists" });
+    }
+    if (existingUser.isVerified) {
+      return res.status(400).json({ status: false, message: "Email is already verified" });
+    }
+    const emailVerification = await EmailVerifyModel.findOne({ userId: existingUser._id, otp });
+    if (!emailVerification) {
+      if (!existingUser.isVerified) {
+        await sendEmailVerificationOTP(req, existingUser);
+        return res.status(400).json({ status: false, message: "Invalid OTP, new OTP sent to your email" });
+      }
+      return res.status(400).json({ status: false, message: "Invalid OTP" });
+    }
+    const currentTime = new Date();
+    const expirationTime = new Date(emailVerification.createdAt.getTime() + 15 * 60 * 1000);
+    if (currentTime > expirationTime) {
+      await sendEmailVerificationOTP(req, existingUser);
+      return res.status(400).json({ status: "failed", message: "OTP expired, new OTP sent to your email" });
+    }
+    existingUser.isVerified = true;
+    await existingUser.save();
+    await EmailVerifyModel.deleteMany({ userId: existingUser._id });
+    return res.status(200).json({ status: true, message: "Email verified successfully" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ status: false, message: "Unable to verify email, please try again later" });
+  }
+}
 
 // Register Store Owner with Store Details
 const registerStoreOwner = async (req, res) => {
@@ -426,7 +466,7 @@ const createStore = async (req, res) => {
       contactNo: contactNo?.trim(),
       whatsappNo: whatsappNo?.trim(),
 
-      email: user.email, 
+      email: user.email,
       website: website?.trim(),
 
       gstin: gstin?.trim(),
@@ -461,7 +501,7 @@ const createStore = async (req, res) => {
 
       userId: userId,
 
-      isVerify: false 
+      isVerify: false
     });
 
     return res.status(201).json({
@@ -876,43 +916,91 @@ const publicAllStores = async (req, res) => {
 };
 
 const storeWithProducts = async (req, res) => {
+
   try {
 
     const { storeId } = req.params;
 
-    const store = await StoreModel.findById(storeId)
-      .populate({
-        path: "userId",
-        select: "name email phone"
-      });
+    if (
+      req.user &&
+      req.user.role === "USER"
+    ) {
+
+      const existingView =
+        await StoreViewModel.findOne({
+          storeId,
+          userId: req.user.id
+        });
+
+      if (!existingView) {
+
+        await StoreViewModel.create({
+          storeId,
+          userId: req.user.id
+        });
+
+        await StoreModel.findByIdAndUpdate(
+          storeId,
+          {
+            $inc: {
+              viewCount: 1
+            }
+          }
+        );
+
+      }
+
+    }
+
+    const store = await StoreModel.findById(
+      storeId
+    ).populate({
+      path: "userId",
+      select: "name email phone"
+    });
 
     if (!store) {
+
       return res.status(404).json({
         message: "Store not found"
       });
+
     }
 
-    const products = await ProductModel.find({
-      storeId: storeId,
-      isActive: true,
-      isVerified: true
-    }).sort({ createdAt: -1 });
+    const products =
+      await ProductModel.find({
+        storeId: storeId,
+        isActive: true,
+        isVerified: true
+      }).sort({
+        createdAt: -1
+      });
 
     return res.status(200).json({
+
       store,
-      totalProducts: products.length,
+
+      totalProducts:
+        products.length,
+
       products
+
     });
 
   } catch (error) {
 
-    console.error("Error fetching store with products:", error);
+    console.error(
+      "Error fetching store with products:",
+      error
+    );
 
     return res.status(500).json({
-      message: "Internal server error"
+      message:
+        "Internal server error"
     });
 
   }
+
 };
 
 const verifyStoreStatus = async (req, res) => {
@@ -979,34 +1067,35 @@ const verifyStoreStatus = async (req, res) => {
   }
 };
 
-const updateStoreRank = async (req, res) => {
+const updateStoreFeatured = async (req, res) => {
   try {
+
     const { storeId } = req.params;
-    const { rank } = req.body;
-
-    const store = await StoreModel.findByIdAndUpdate(
-      storeId,
-      { rank },
-      { new: true }
-    );
-
+    const store = await StoreModel.findById(storeId);
     if (!store) {
+
       return res.status(404).json({
         message: "Store not found"
       });
-    }
 
+    }
+    store.isFeatured = !store.isFeatured;
+    await store.save();
     return res.status(200).json({
-      message: "Store rank updated",
+      message: `Store ${store.isFeatured
+        ? "featured"
+        : "removed from featured"
+        } successfully`,
       store
     });
-
   } catch (error) {
+    console.error(error);
     return res.status(500).json({
       message: "Internal server error"
     });
+
   }
 };
 
-module.exports = { registerAdmin, registerOwner, createUser, allStores, singleStore, updateStoreAndUser, deleteStoreAndUser, userBasedStores, publicAllStores, storeWithProducts, registerStoreOwner, verifyStoreStatus,createStore,updateStoreRank };
+module.exports = { registerAdmin, registerOwner, createUser, allStores, singleStore, updateStoreAndUser, deleteStoreAndUser, userBasedStores, publicAllStores, storeWithProducts, registerStoreOwner, verifyStoreStatus, createStore, updateStoreFeatured, verifyEmailOTP };
 
