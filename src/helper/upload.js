@@ -1,32 +1,41 @@
-const { S3Client } = require("@aws-sdk/client-s3");
-const { Upload } = require("@aws-sdk/lib-storage");
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
+require("dotenv").config();
 
-const s3 = new S3Client({
-  region: process.env.YOUR_BUCKET_REGION,
+const r2 = new S3Client({
+  region: "auto",
+  endpoint: process.env.R2_ENDPOINT,
   credentials: {
-    accessKeyId: process.env.YOUR_ACCESS_KEY,
-    secretAccessKey: process.env.YOUR_SECRET_KEY,
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
   },
 });
 
-const uploadSingleImage = async (file) => {
-  if (!file) return null;
+// 🔥 UPLOAD
+const uploadToR2 = async (fileBuffer, fileName, mimeType) => {
+  const params = {
+    Bucket: process.env.R2_BUCKET_NAME,
+    Key: fileName,
+    Body: fileBuffer,
+    ContentType: mimeType,
+  };
 
-  const key = `petroll-pamp/${Date.now()}-${file.originalname}`;
+  await r2.send(new PutObjectCommand(params));
 
-  const upload = new Upload({
-    client: s3,
-    params: {
-      Bucket: process.env.BUCKETNAME,
-      Key: key,
-      Body: file.buffer,      
-      ContentType: file.mimetype,
-    },
-  });
-
-  await upload.done();
-
-  return `https://${process.env.BUCKETNAME}.s3.${process.env.YOUR_BUCKET_REGION}.amazonaws.com/${key}`;
+  return `${process.env.R2_PUBLIC_URL}/${fileName}`;
 };
 
-module.exports = uploadSingleImage;
+// 🗑️ DELETE
+const deleteFromR2 = async (fileName) => {
+  const params = {
+    Bucket: process.env.R2_BUCKET_NAME,
+    Key: fileName,
+  };
+
+  await r2.send(new DeleteObjectCommand(params));
+  return true;
+};
+
+module.exports = {
+  uploadToR2,
+  deleteFromR2,
+};

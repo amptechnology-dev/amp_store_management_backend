@@ -1,19 +1,21 @@
 const mongoose = require("mongoose");
-const UserModel = require("../model/user.model.js")
-const StoreModel = require("../model/store.model.js")
+const UserModel = require("../model/user.model.js");
+const StoreModel = require("../model/store.model.js");
 const StoreViewModel = require("../model/StoreViewModel.js");
 const ProductModel = require("../model/product.model.js");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const { passwordGenerator } = require("../helper/PasswordGenerator.js")
-const { createUserSchema, updateUserSchema } = require("../schema/user.schema.js");
-const uploadSingleImage = require("../helper/upload.js");
-const sendPasswordEmail = require("../helper/mail.service.js")
+const { passwordGenerator } = require("../helper/PasswordGenerator.js");
+const {
+  createUserSchema,
+  updateUserSchema,
+} = require("../schema/user.schema.js");
+const { uploadToR2 } = require("../helper/upload.js");
+const sendPasswordEmail = require("../helper/mail.service.js");
 const sendStoreVerifyEmail = require("../helper/sendStoreVerifyEmail");
 const { sendPasswordSMS } = require("../helper/sendPasswordSMS.js");
-const sendEmailVerificationOTP = require('../helper/sendEmailVerificationOTP.js');
-const EmailVerifyModel = require('../model/otpverify.js')
-
+const sendEmailVerificationOTP = require("../helper/sendEmailVerificationOTP.js");
+const EmailVerifyModel = require("../model/otpverify.js");
 
 const registerAdmin = async (req, res) => {
   try {
@@ -31,7 +33,7 @@ const registerAdmin = async (req, res) => {
 
     const user = new UserModel({
       ...parsedData,
-      password: hashedPassword
+      password: hashedPassword,
     });
 
     await user.save();
@@ -45,35 +47,35 @@ const registerAdmin = async (req, res) => {
       {
         userId: userId,
         name: "Fuel Purchase",
-        type: "EXPENSE"
+        type: "EXPENSE",
       },
       {
         userId: userId,
         name: "Fuel Sales",
-        type: "INCOME"
+        type: "INCOME",
       },
       {
         userId: userId,
         name: "Accessory Expenses",
-        type: "EXPENSE"
+        type: "EXPENSE",
       },
       {
         userId: userId,
         name: "Accessory Sales",
-        type: "INCOME"
-      }
+        type: "INCOME",
+      },
     ];
 
     // Check existing heads to avoid duplicates
     const existingHeads = await AccountHead.find({
       userId: userId,
-      name: { $in: defaultHeads.map(h => h.name) }
+      name: { $in: defaultHeads.map((h) => h.name) },
     });
 
-    const existingNames = existingHeads.map(h => h.name);
+    const existingNames = existingHeads.map((h) => h.name);
 
     const headsToInsert = defaultHeads.filter(
-      head => !existingNames.includes(head.name)
+      (head) => !existingNames.includes(head.name),
     );
 
     if (headsToInsert.length > 0) {
@@ -82,11 +84,9 @@ const registerAdmin = async (req, res) => {
 
     return res.status(201).json({
       message: "Petrol Pump registered successfully",
-      user
+      user,
     });
-
   } catch (error) {
-
     if (error.code === 11000 && error.keyPattern?.email) {
       return res.status(409).json({
         message: "Email already in use",
@@ -122,14 +122,15 @@ const registerOwner = async (req, res) => {
     const user = new UserModel({
       ...parsedData,
       password: hashedPassword,
-      role: "STORE"
+      role: "STORE",
     });
     await user.save();
     const userId = user._id;
-    sendEmailVerificationOTP(req, user)
+    sendEmailVerificationOTP(req, user);
     return res.status(201).json({
-      message: "Store owner registered and verification email sent successfully !",
-      user
+      message:
+        "Store owner registered and verification email sent successfully !",
+      user,
     });
   } catch (error) {
     if (error.code === 11000 && error.keyPattern?.email) {
@@ -154,38 +155,60 @@ const verifyEmailOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
     if (!email || !otp) {
-      return res.status(400).json({ status: false, message: "All fields are required" });
+      return res
+        .status(400)
+        .json({ status: false, message: "All fields are required" });
     }
     const existingUser = await UserModel.findOne({ email });
     if (!existingUser) {
-      return res.status(404).json({ status: "failed", message: "Email doesn't exists" });
+      return res
+        .status(404)
+        .json({ status: "failed", message: "Email doesn't exists" });
     }
     if (existingUser.isVerified) {
-      return res.status(400).json({ status: false, message: "Email is already verified" });
+      return res
+        .status(400)
+        .json({ status: false, message: "Email is already verified" });
     }
-    const emailVerification = await EmailVerifyModel.findOne({ userId: existingUser._id, otp });
+    const emailVerification = await EmailVerifyModel.findOne({
+      userId: existingUser._id,
+      otp,
+    });
     if (!emailVerification) {
       if (!existingUser.isVerified) {
         await sendEmailVerificationOTP(req, existingUser);
-        return res.status(400).json({ status: false, message: "Invalid OTP, new OTP sent to your email" });
+        return res.status(400).json({
+          status: false,
+          message: "Invalid OTP, new OTP sent to your email",
+        });
       }
       return res.status(400).json({ status: false, message: "Invalid OTP" });
     }
     const currentTime = new Date();
-    const expirationTime = new Date(emailVerification.createdAt.getTime() + 15 * 60 * 1000);
+    const expirationTime = new Date(
+      emailVerification.createdAt.getTime() + 15 * 60 * 1000,
+    );
     if (currentTime > expirationTime) {
       await sendEmailVerificationOTP(req, existingUser);
-      return res.status(400).json({ status: "failed", message: "OTP expired, new OTP sent to your email" });
+      return res.status(400).json({
+        status: "failed",
+        message: "OTP expired, new OTP sent to your email",
+      });
     }
     existingUser.isVerified = true;
     await existingUser.save();
     await EmailVerifyModel.deleteMany({ userId: existingUser._id });
-    return res.status(200).json({ status: true, message: "Email verified successfully" });
+    return res
+      .status(200)
+      .json({ status: true, message: "Email verified successfully" });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ status: false, message: "Unable to verify email, please try again later" });
+    res.status(500).json({
+      status: false,
+      message: "Unable to verify email, please try again later",
+    });
   }
-}
+};
 
 // Register Store Owner with Store Details
 const registerStoreOwner = async (req, res) => {
@@ -203,14 +226,14 @@ const registerStoreOwner = async (req, res) => {
       website,
       gstin,
       lat,
-      long
+      long,
     } = req.body;
 
     const existingUser = await UserModel.findOne({ email });
 
     if (existingUser) {
       return res.status(400).json({
-        message: "User already exists with this email"
+        message: "User already exists with this email",
       });
     }
 
@@ -222,24 +245,26 @@ const registerStoreOwner = async (req, res) => {
       email: email?.trim(),
       phone: phone?.trim(),
       password: hashedPassword,
-      role: "STORE"
+      role: "STORE",
     });
 
     /* IMAGE UPLOAD */
 
     let images = [];
 
-    if (req.files?.length) {
+     if (req.files?.length) {
       for (const file of req.files) {
         if (file.fieldname.startsWith("image")) {
-          const url = await uploadSingleImage(file);
+          const fileName = `amp-store/${Date.now()}-${file.originalname}`;
+
+          const url = await uploadToR2(file.buffer, fileName, file.mimetype);
+
           images.push(url);
         }
       }
     }
 
     const store = await StoreModel.create({
-
       storeName: storeName?.trim(),
       storeType: storeType?.trim(),
       description: description?.trim(),
@@ -260,12 +285,12 @@ const registerStoreOwner = async (req, res) => {
       address: {
         area: req.body?.address?.area,
         state: req.body?.address?.state,
-        country: req.body?.address?.country
+        country: req.body?.address?.country,
       },
 
       timing: {
         open: req.body?.timing?.open,
-        close: req.body?.timing?.close
+        close: req.body?.timing?.close,
       },
 
       timingByDay: {
@@ -275,38 +300,35 @@ const registerStoreOwner = async (req, res) => {
         wednesday: req.body?.timingByDay?.wednesday,
         thursday: req.body?.timingByDay?.thursday,
         friday: req.body?.timingByDay?.friday,
-        saturday: req.body?.timingByDay?.saturday
+        saturday: req.body?.timingByDay?.saturday,
       },
 
       imageSeo: req.body.imageSeo,
 
-      userId: user._id
-
+      userId: user._id,
     });
 
     await sendPasswordEmail(req.body.email, req.body.password);
 
     return res.status(201).json({
-      message: "Your store registration is successful. Please wait for admin verification.",
+      message:
+        "Your store registration is successful. Please wait for admin verification.",
       user: {
         ...user.toObject(),
-        password: undefined
+        password: undefined,
       },
-      store
+      store,
     });
-
   } catch (error) {
-
     console.error("User creation error:", error);
 
     return res.status(500).json({
-      message: "Internal server error"
+      message: "Internal server error",
     });
-
   }
 };
 
-// We create Store Store owner 
+// We create Store Store owner
 const createUser = async (req, res) => {
   try {
     const {
@@ -329,7 +351,7 @@ const createUser = async (req, res) => {
 
     if (existingUser) {
       return res.status(400).json({
-        message: "User already exists with this email"
+        message: "User already exists with this email",
       });
     }
 
@@ -341,24 +363,26 @@ const createUser = async (req, res) => {
       email: email?.trim(),
       phone: phone?.trim(),
       password: hashedPassword,
-      role: "STORE"
+      role: "STORE",
     });
 
     /* IMAGE UPLOAD */
 
     let images = [];
 
-    if (req.files?.length) {
+     if (req.files?.length) {
       for (const file of req.files) {
         if (file.fieldname.startsWith("image")) {
-          const url = await uploadSingleImage(file);
+          const fileName = `amp-store/${Date.now()}-${file.originalname}`;
+
+          const url = await uploadToR2(file.buffer, fileName, file.mimetype);
+
           images.push(url);
         }
       }
     }
 
     const store = await StoreModel.create({
-
       storeName: storeName?.trim(),
       storeType: storeType?.trim(),
       description: description?.trim(),
@@ -379,12 +403,12 @@ const createUser = async (req, res) => {
       address: {
         area: req.body?.address?.area,
         state: req.body?.address?.state,
-        country: req.body?.address?.country
+        country: req.body?.address?.country,
       },
 
       timing: {
         open: req.body?.timing?.open,
-        close: req.body?.timing?.close
+        close: req.body?.timing?.close,
       },
 
       timingByDay: {
@@ -394,33 +418,29 @@ const createUser = async (req, res) => {
         wednesday: req.body?.timingByDay?.wednesday,
         thursday: req.body?.timingByDay?.thursday,
         friday: req.body?.timingByDay?.friday,
-        saturday: req.body?.timingByDay?.saturday
+        saturday: req.body?.timingByDay?.saturday,
       },
 
       imageSeo: req.body.imageSeo,
 
       userId: user._id,
       isVerify: true,
-
     });
 
     return res.status(201).json({
       message: "User and store created successfully",
       user: {
         ...user.toObject(),
-        password: undefined
+        password: undefined,
       },
-      store
+      store,
     });
-
   } catch (error) {
-
     console.error("User creation error:", error);
 
     return res.status(500).json({
-      message: "Internal server error"
+      message: "Internal server error",
     });
-
   }
 };
 
@@ -443,16 +463,19 @@ const createStore = async (req, res) => {
     const user = await UserModel.findById(userId);
     if (!user) {
       return res.status(404).json({
-        message: "User not found"
+        message: "User not found",
       });
     }
 
     let images = [];
 
-    if (req.files?.length) {
+     if (req.files?.length) {
       for (const file of req.files) {
         if (file.fieldname.startsWith("image")) {
-          const url = await uploadSingleImage(file);
+          const fileName = `amp-store/${Date.now()}-${file.originalname}`;
+
+          const url = await uploadToR2(file.buffer, fileName, file.mimetype);
+
           images.push(url);
         }
       }
@@ -479,12 +502,12 @@ const createStore = async (req, res) => {
       address: {
         area: req.body?.address?.area,
         state: req.body?.address?.state,
-        country: req.body?.address?.country
+        country: req.body?.address?.country,
       },
 
       timing: {
         open: req.body?.timing?.open,
-        close: req.body?.timing?.close
+        close: req.body?.timing?.close,
       },
 
       timingByDay: {
@@ -494,35 +517,36 @@ const createStore = async (req, res) => {
         wednesday: req.body?.timingByDay?.wednesday,
         thursday: req.body?.timingByDay?.thursday,
         friday: req.body?.timingByDay?.friday,
-        saturday: req.body?.timingByDay?.saturday
+        saturday: req.body?.timingByDay?.saturday,
       },
 
       imageSeo: req.body.imageSeo,
 
       userId: userId,
 
-      isVerify: false
+      isVerify: false,
     });
 
     return res.status(201).json({
       message: "Store created successfully",
-      store
+      store,
     });
-
   } catch (error) {
     console.error("Store creation error:", error);
 
     return res.status(500).json({
-      message: "Internal server error"
+      message: "Internal server error",
     });
   }
 };
 
-
 const allStores = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || parseInt(process.env.DEFAULT_PAGE_SIZE) || 10;
+    const limit =
+      parseInt(req.query.limit) ||
+      parseInt(process.env.DEFAULT_PAGE_SIZE) ||
+      10;
     const search = req.query.search || "";
 
     const skip = (page - 1) * limit;
@@ -530,56 +554,56 @@ const allStores = async (req, res) => {
     const pipeline = [
       {
         $match: {
-          storeName: { $regex: search, $options: "i" }
-        }
+          storeName: { $regex: search, $options: "i" },
+        },
       },
       {
         $lookup: {
           from: "users",
           localField: "userId",
           foreignField: "_id",
-          as: "owner"
-        }
+          as: "owner",
+        },
       },
 
       {
         $unwind: {
           path: "$owner",
-          preserveNullAndEmptyArrays: true
-        }
+          preserveNullAndEmptyArrays: true,
+        },
       },
 
       {
         $addFields: {
           ownerName: "$owner.name",
           ownerEmail: "$owner.email",
-          ownerPhone: "$owner.phone"
-        }
+          ownerPhone: "$owner.phone",
+        },
       },
 
       {
         $project: {
-          owner: 0
-        }
+          owner: 0,
+        },
       },
 
       {
-        $sort: { createdAt: -1 }
+        $sort: { createdAt: -1 },
       },
 
       {
-        $skip: skip
+        $skip: skip,
       },
 
       {
-        $limit: limit
-      }
+        $limit: limit,
+      },
     ];
 
     const stores = await StoreModel.aggregate(pipeline);
 
     const totalStores = await StoreModel.countDocuments({
-      storeName: { $regex: search, $options: "i" }
+      storeName: { $regex: search, $options: "i" },
     });
 
     const totalPages = Math.ceil(totalStores / limit);
@@ -588,18 +612,16 @@ const allStores = async (req, res) => {
       page,
       totalPages,
       totalStores,
-      stores
+      stores,
     });
-
   } catch (error) {
     console.error("Error fetching stores:", error);
 
     return res.status(500).json({
-      message: "Internal server error"
+      message: "Internal server error",
     });
   }
 };
-
 
 const singleStore = async (req, res) => {
   try {
@@ -608,8 +630,8 @@ const singleStore = async (req, res) => {
     const store = await StoreModel.aggregate([
       {
         $match: {
-          _id: new mongoose.Types.ObjectId(storeId)
-        }
+          _id: new mongoose.Types.ObjectId(storeId),
+        },
       },
 
       {
@@ -617,12 +639,12 @@ const singleStore = async (req, res) => {
           from: "users",
           localField: "userId",
           foreignField: "_id",
-          as: "owner"
-        }
+          as: "owner",
+        },
       },
 
       {
-        $unwind: "$owner"
+        $unwind: "$owner",
       },
 
       {
@@ -651,41 +673,39 @@ const singleStore = async (req, res) => {
             _id: "$owner._id",
             name: "$owner.name",
             email: "$owner.email",
-            phone: "$owner.phone"
-          }
-        }
-      }
+            phone: "$owner.phone",
+          },
+        },
+      },
     ]);
 
     if (!store.length) {
       return res.status(404).json({
-        message: "Store not found"
+        message: "Store not found",
       });
     }
 
     return res.status(200).json({
-      store: store[0]
+      store: store[0],
     });
-
   } catch (error) {
     console.error("Error fetching store:", error);
 
     return res.status(500).json({
-      message: "Internal server error"
+      message: "Internal server error",
     });
   }
 };
 
 const updateStoreAndUser = async (req, res) => {
   try {
-
     const { storeId } = req.params;
 
     const store = await StoreModel.findById(storeId);
 
     if (!store) {
       return res.status(404).json({
-        message: "Store not found"
+        message: "Store not found",
       });
     }
 
@@ -704,12 +724,8 @@ const updateStoreAndUser = async (req, res) => {
       name: req.body.name || user.name,
       email: req.body.email || user.email,
       phone: req.body.phone || user.phone,
-      password
+      password,
     });
-
-    /* ==============================
-       🖼 IMAGE HANDLE (IMPORTANT FIX)
-    ============================== */
 
     let images = [];
 
@@ -726,7 +742,10 @@ const updateStoreAndUser = async (req, res) => {
     if (req.files?.length) {
       for (const file of req.files) {
         if (file.fieldname.startsWith("image")) {
-          const url = await uploadSingleImage(file);
+          const fileName = `amp-store/${Date.now()}-${file.originalname}`;
+
+          const url = await uploadToR2(file.buffer, fileName, file.mimetype);
+
           images.push(url);
         }
       }
@@ -742,7 +761,6 @@ const updateStoreAndUser = async (req, res) => {
     const updatedStore = await StoreModel.findByIdAndUpdate(
       storeId,
       {
-
         storeName: req.body.storeName || store.storeName,
         storeType: req.body.storeType || store.storeType,
         description: req.body.description || store.description,
@@ -761,59 +779,57 @@ const updateStoreAndUser = async (req, res) => {
         address: {
           area: req.body?.address?.area || store.address?.area,
           state: req.body?.address?.state || store.address?.state,
-          country: req.body?.address?.country || store.address?.country
+          country: req.body?.address?.country || store.address?.country,
         },
 
         timing: {
           open: req.body?.timing?.open || store.timing?.open,
-          close: req.body?.timing?.close || store.timing?.close
+          close: req.body?.timing?.close || store.timing?.close,
         },
 
         timingByDay: {
           sunday: req.body?.timingByDay?.sunday || store.timingByDay?.sunday,
           monday: req.body?.timingByDay?.monday || store.timingByDay?.monday,
           tuesday: req.body?.timingByDay?.tuesday || store.timingByDay?.tuesday,
-          wednesday: req.body?.timingByDay?.wednesday || store.timingByDay?.wednesday,
-          thursday: req.body?.timingByDay?.thursday || store.timingByDay?.thursday,
+          wednesday:
+            req.body?.timingByDay?.wednesday || store.timingByDay?.wednesday,
+          thursday:
+            req.body?.timingByDay?.thursday || store.timingByDay?.thursday,
           friday: req.body?.timingByDay?.friday || store.timingByDay?.friday,
-          saturday: req.body?.timingByDay?.saturday || store.timingByDay?.saturday
+          saturday:
+            req.body?.timingByDay?.saturday || store.timingByDay?.saturday,
         },
 
         imageSeo: req.body.imageSeo || store.imageSeo,
 
         isVerify: req.body.isVerify ?? store.isVerify,
-        isActive: req.body.isActive ?? store.isActive
-
+        isActive: req.body.isActive ?? store.isActive,
       },
-      { new: true }
+      { new: true },
     );
 
     return res.status(200).json({
       message: "User and store updated successfully",
-      store: updatedStore
+      store: updatedStore,
     });
-
   } catch (error) {
-
     console.error("Update error:", error);
 
     return res.status(500).json({
-      message: "Internal server error"
+      message: "Internal server error",
     });
-
   }
 };
 
 const deleteStoreAndUser = async (req, res) => {
   try {
-
     const { storeId } = req.params;
 
     const store = await StoreModel.findById(storeId);
 
     if (!store) {
       return res.status(404).json({
-        message: "Store not found"
+        message: "Store not found",
       });
     }
 
@@ -828,31 +844,27 @@ const deleteStoreAndUser = async (req, res) => {
     await UserModel.findByIdAndDelete(userId);
 
     return res.status(200).json({
-      message: "Store and related user deleted successfully"
+      message: "Store and related user deleted successfully",
     });
-
   } catch (error) {
-
     console.error("Delete error:", error);
 
     return res.status(500).json({
-      message: "Internal server error"
+      message: "Internal server error",
     });
-
   }
 };
 
 const userBasedStores = async (req, res) => {
   try {
-
     const userId = req.user._id || req.user.id;
 
     const stores = await StoreModel.find({
-      userId: userId
+      userId: userId,
     })
       .populate({
         path: "userId",
-        select: "name email phone"
+        select: "name email phone",
       })
       .sort({ createdAt: -1 });
 
@@ -860,23 +872,19 @@ const userBasedStores = async (req, res) => {
 
     return res.status(200).json({
       totalStores,
-      stores
+      stores,
     });
-
   } catch (error) {
-
     console.error("Error fetching stores:", error);
 
     return res.status(500).json({
-      message: "Internal server error"
+      message: "Internal server error",
     });
-
   }
 };
 
 const publicAllStores = async (req, res) => {
   try {
-
     const search = req.query.search || "";
 
     const stores = await StoreModel.find({
@@ -888,130 +896,97 @@ const publicAllStores = async (req, res) => {
             { storeName: { $regex: search, $options: "i" } },
             { "address.area": { $regex: search, $options: "i" } },
             { "address.state": { $regex: search, $options: "i" } },
-            { "address.country": { $regex: search, $options: "i" } }
-          ]
-        }
-      ]
+            { "address.country": { $regex: search, $options: "i" } },
+          ],
+        },
+      ],
     })
       .populate({
         path: "userId",
-        select: "name email phone"
+        select: "name email phone",
       })
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
       totalStores: stores.length,
-      stores
+      stores,
     });
-
   } catch (error) {
-
     console.error("Error fetching public stores:", error);
 
     return res.status(500).json({
-      message: "Internal server error"
+      message: "Internal server error",
     });
-
   }
 };
 
 const storeWithProducts = async (req, res) => {
-
   try {
-
     const { storeId } = req.params;
 
-    if (
-      req.user &&
-      req.user.role === "USER"
-    ) {
-
-      const existingView =
-        await StoreViewModel.findOne({
-          storeId,
-          userId: req.user.id
-        });
+    if (req.user && req.user.role === "USER") {
+      const existingView = await StoreViewModel.findOne({
+        storeId,
+        userId: req.user.id,
+      });
 
       if (!existingView) {
-
         await StoreViewModel.create({
           storeId,
-          userId: req.user.id
+          userId: req.user.id,
         });
 
-        await StoreModel.findByIdAndUpdate(
-          storeId,
-          {
-            $inc: {
-              viewCount: 1
-            }
-          }
-        );
-
+        await StoreModel.findByIdAndUpdate(storeId, {
+          $inc: {
+            viewCount: 1,
+          },
+        });
       }
-
     }
 
-    const store = await StoreModel.findById(
-      storeId
-    ).populate({
+    const store = await StoreModel.findById(storeId).populate({
       path: "userId",
-      select: "name email phone"
+      select: "name email phone",
     });
 
     if (!store) {
-
       return res.status(404).json({
-        message: "Store not found"
+        message: "Store not found",
       });
-
     }
 
-    const products =
-      await ProductModel.find({
-        storeId: storeId,
-        isActive: true,
-        isVerified: true
-      }).sort({
-        createdAt: -1
-      });
+    const products = await ProductModel.find({
+      storeId: storeId,
+      isActive: true,
+      isVerified: true,
+    }).sort({
+      createdAt: -1,
+    });
 
     return res.status(200).json({
-
       store,
 
-      totalProducts:
-        products.length,
+      totalProducts: products.length,
 
-      products
-
+      products,
     });
-
   } catch (error) {
-
-    console.error(
-      "Error fetching store with products:",
-      error
-    );
+    console.error("Error fetching store with products:", error);
 
     return res.status(500).json({
-      message:
-        "Internal server error"
+      message: "Internal server error",
     });
-
   }
-
 };
 
 const verifyStoreStatus = async (req, res) => {
   try {
-
     const { storeId } = req.params;
     const { isVerify } = req.body;
 
     if (!storeId) {
       return res.status(400).json({
-        message: "Store ID is required"
+        message: "Store ID is required",
       });
     }
 
@@ -1022,7 +997,7 @@ const verifyStoreStatus = async (req, res) => {
 
     if (!store) {
       return res.status(404).json({
-        message: "Store not found"
+        message: "Store not found",
       });
     }
 
@@ -1044,7 +1019,7 @@ const verifyStoreStatus = async (req, res) => {
       await sendStoreVerifyEmail(
         user.email,
         store.storeName,
-        store.storeUniqueId
+        store.storeUniqueId,
       );
     }
 
@@ -1053,49 +1028,56 @@ const verifyStoreStatus = async (req, res) => {
       message:
         "Store is " +
         (isVerify ? "verified" : "not verified") +
-        " successfully"
+        " successfully",
     });
-
   } catch (error) {
-
     console.error("Store verify error:", error);
 
     return res.status(500).json({
-      message: "Internal server error"
+      message: "Internal server error",
     });
-
   }
 };
 
 const updateStoreFeatured = async (req, res) => {
   try {
-
     const { storeId } = req.params;
     const store = await StoreModel.findById(storeId);
     if (!store) {
-
       return res.status(404).json({
-        message: "Store not found"
+        message: "Store not found",
       });
-
     }
     store.isFeatured = !store.isFeatured;
     await store.save();
     return res.status(200).json({
-      message: `Store ${store.isFeatured
-        ? "featured"
-        : "removed from featured"
-        } successfully`,
-      store
+      message: `Store ${
+        store.isFeatured ? "featured" : "removed from featured"
+      } successfully`,
+      store,
     });
   } catch (error) {
     console.error(error);
     return res.status(500).json({
-      message: "Internal server error"
+      message: "Internal server error",
     });
-
   }
 };
 
-module.exports = { registerAdmin, registerOwner, createUser, allStores, singleStore, updateStoreAndUser, deleteStoreAndUser, userBasedStores, publicAllStores, storeWithProducts, registerStoreOwner, verifyStoreStatus, createStore, updateStoreFeatured, verifyEmailOTP };
-
+module.exports = {
+  registerAdmin,
+  registerOwner,
+  createUser,
+  allStores,
+  singleStore,
+  updateStoreAndUser,
+  deleteStoreAndUser,
+  userBasedStores,
+  publicAllStores,
+  storeWithProducts,
+  registerStoreOwner,
+  verifyStoreStatus,
+  createStore,
+  updateStoreFeatured,
+  verifyEmailOTP,
+};
