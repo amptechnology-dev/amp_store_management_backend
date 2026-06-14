@@ -1,6 +1,6 @@
 const router = require("express").Router();
 
-const { registerAdmin, registerOwner, createUser, allStores, singleStore, updateStoreAndUser, deleteStoreAndUser, userBasedStores, publicAllStores, storeWithProducts, registerStoreOwner, verifyStoreStatus,createStore,updateStoreFeatured,verifyEmailOTP } = require("../controller/register.controller.js");
+const { registerAdmin, registerOwner, createUser, allStores, singleStore, updateStoreAndUser, deleteStoreAndUser, userBasedStores, publicAllStores, storeWithProducts, registerStoreOwner, verifyStoreStatus,createStore,updateStoreFeatured,verifyEmailOTP,storesBySubCategory,searchStoreNames } = require("../controller/register.controller.js");
 const verifyJwt = require("../middleware/verifiyUser.js");
 const authorize = require("../middleware/authorize.js");
 const { uploadMultiImages } = require("../middleware/multiMulter.js")
@@ -21,5 +21,7 @@ router.get("/public-all-stores", publicAllStores);
 router.get("/store-with-products/:storeId", verifyJwt, storeWithProducts);
 router.patch("/verify-store-status/:storeId", verifyStoreStatus);
 router.patch("/update-store-featured/:storeId", updateStoreFeatured);
+router.get("/stores-by-subcategory/:subCategoryId", storesBySubCategory);
+router.get("/search-store-names", searchStoreNames);
 
 module.exports = router;

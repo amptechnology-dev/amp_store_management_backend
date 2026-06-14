@@ -220,6 +220,8 @@ const registerStoreOwner = async (req, res) => {
       password,
       storeName,
       storeType,
+      categoryId,
+      subCategoryId,
       description,
       contactNo,
       whatsappNo,
@@ -252,7 +254,7 @@ const registerStoreOwner = async (req, res) => {
 
     let images = [];
 
-     if (req.files?.length) {
+    if (req.files?.length) {
       for (const file of req.files) {
         if (file.fieldname.startsWith("image")) {
           const fileName = `amp-store/${Date.now()}-${file.originalname}`;
@@ -267,6 +269,8 @@ const registerStoreOwner = async (req, res) => {
     const store = await StoreModel.create({
       storeName: storeName?.trim(),
       storeType: storeType?.trim(),
+      categoryId: categoryId?.trim(),
+      subCategoryId: subCategoryId?.trim(),
       description: description?.trim(),
 
       contactNo: contactNo?.trim(),
@@ -338,6 +342,8 @@ const createUser = async (req, res) => {
       password,
       storeName,
       storeType,
+      categoryId,
+      subCategoryId,
       description,
       contactNo,
       whatsappNo,
@@ -370,7 +376,7 @@ const createUser = async (req, res) => {
 
     let images = [];
 
-     if (req.files?.length) {
+    if (req.files?.length) {
       for (const file of req.files) {
         if (file.fieldname.startsWith("image")) {
           const fileName = `amp-store/${Date.now()}-${file.originalname}`;
@@ -385,6 +391,8 @@ const createUser = async (req, res) => {
     const store = await StoreModel.create({
       storeName: storeName?.trim(),
       storeType: storeType?.trim(),
+      categoryId: categoryId?.trim(),
+      subCategoryId: subCategoryId?.trim(),
       description: description?.trim(),
 
       contactNo: contactNo?.trim(),
@@ -427,6 +435,8 @@ const createUser = async (req, res) => {
       isVerify: true,
     });
 
+    console.log("New store created:", JSON.stringify(req.body, null, 2));
+
     return res.status(201).json({
       message: "User and store created successfully",
       user: {
@@ -436,7 +446,7 @@ const createUser = async (req, res) => {
       store,
     });
   } catch (error) {
-    console.error("User creation error:", error);
+    console.log("User creation error:", error);
 
     return res.status(500).json({
       message: "Internal server error",
@@ -449,6 +459,8 @@ const createStore = async (req, res) => {
     const {
       storeName,
       storeType,
+      categoryId,
+      subCategoryId,
       description,
       contactNo,
       whatsappNo,
@@ -469,7 +481,7 @@ const createStore = async (req, res) => {
 
     let images = [];
 
-     if (req.files?.length) {
+    if (req.files?.length) {
       for (const file of req.files) {
         if (file.fieldname.startsWith("image")) {
           const fileName = `amp-store/${Date.now()}-${file.originalname}`;
@@ -484,6 +496,8 @@ const createStore = async (req, res) => {
     const store = await StoreModel.create({
       storeName: storeName?.trim(),
       storeType: storeType?.trim(),
+      categoryId: categoryId?.trim(),
+      subCategoryId: subCategoryId?.trim(),
       description: description?.trim(),
 
       contactNo: contactNo?.trim(),
@@ -651,6 +665,8 @@ const singleStore = async (req, res) => {
         $project: {
           storeName: 1,
           storeType: 1,
+          categoryId: 1,
+          subCategoryId: 1,
           storeUniqueId: 1,
           description: 1,
           images: 1,
@@ -763,6 +779,8 @@ const updateStoreAndUser = async (req, res) => {
       {
         storeName: req.body.storeName || store.storeName,
         storeType: req.body.storeType || store.storeType,
+        categoryId: req.body.categoryId || store.categoryId,
+        subCategoryId: req.body.subCategoryId || store.subCategoryId,
         description: req.body.description || store.description,
 
         contactNo: req.body.contactNo || store.contactNo,
@@ -1064,6 +1082,63 @@ const updateStoreFeatured = async (req, res) => {
   }
 };
 
+const storesBySubCategory = async (req, res) => {
+  try {
+    const { subCategoryId } = req.params;
+
+    const stores = await StoreModel.find({
+      subCategoryId,
+      isActive: true,
+    })
+      .populate("userId", "name email")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      total: stores.length,
+      stores,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
+const searchStoreNames = async (req, res) => {
+  try {
+    const { search = "" } = req.query;
+
+    const stores = await StoreModel.find(
+      {
+        storeName: {
+          $regex: search,
+          $options: "i",
+        },
+        isActive: true,
+      },
+      {
+        storeName: 1,
+        _id: 1,
+      },
+    )
+      .limit(20)
+      .sort({ storeName: 1 });
+
+    return res.status(200).json({
+      total: stores.length,
+      stores,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
 module.exports = {
   registerAdmin,
   registerOwner,
@@ -1080,4 +1155,6 @@ module.exports = {
   createStore,
   updateStoreFeatured,
   verifyEmailOTP,
+  storesBySubCategory,
+  searchStoreNames,
 };

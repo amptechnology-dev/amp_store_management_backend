@@ -15,12 +15,12 @@ const addReview = async (req, res) => {
             (review) =>
                 review.userId.toString() === req.user.id
         );
-        if (alreadyReviewed) {
-            return res.status(400).json({
-                message: "You already reviewed this store"
-            });
+        // if (alreadyReviewed) {
+        //     return res.status(400).json({
+        //         message: "You already reviewed this store"
+        //     });
 
-        }
+        // }
         const newReview = {
             comment,
             rating,

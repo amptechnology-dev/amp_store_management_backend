@@ -5,48 +5,59 @@ const reviewSchema = new mongoose.Schema(
   {
     comment: { type: String },
     rating: { type: Number, min: 1, max: 5 },
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const imageSeoSchema = new mongoose.Schema({
   description: String,
-  keyword: String
+  keyword: String,
 });
 
 const storeSchema = new mongoose.Schema(
   {
     storeName: {
       type: String,
-      required: true
+      required: true,
     },
     storeType: {
       type: String,
-      required: true
+      required: true,
+    },
+
+    categoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+      required: true,
+    },
+
+    subCategoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
     },
 
     storeUniqueId: {
       type: String,
-      unique: true
+      unique: true,
     },
 
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true
+      required: true,
     },
 
     images: [
       {
-        type: String
-      }
+        type: String,
+      },
     ],
 
     address: {
       area: String,
       state: String,
-      country: String
+      country: String,
     },
 
     lat: Number,
@@ -62,7 +73,7 @@ const storeSchema = new mongoose.Schema(
 
     timing: {
       open: String,
-      close: String
+      close: String,
     },
 
     timingByDay: {
@@ -72,11 +83,11 @@ const storeSchema = new mongoose.Schema(
       wednesday: String,
       thursday: String,
       friday: String,
-      saturday: String
+      saturday: String,
     },
 
     gstin: {
-      type: String
+      type: String,
     },
 
     imageSeo: imageSeoSchema,
@@ -85,23 +96,23 @@ const storeSchema = new mongoose.Schema(
 
     isActive: {
       type: Boolean,
-      default: true
+      default: true,
     },
 
     isVerify: {
       type: Boolean,
-      default: false
+      default: false,
     },
     isFeatured: {
       type: Boolean,
-      default: false
+      default: false,
     },
     viewCount: {
       type: Number,
-      default: 0
-    }
+      default: 0,
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 storeSchema.pre("save", function () {
