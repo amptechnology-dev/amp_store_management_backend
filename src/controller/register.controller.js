@@ -1139,6 +1139,56 @@ const searchStoreNames = async (req, res) => {
   }
 };
 
+const allStates = async (req, res) => {
+  try {
+    const states = await StoreModel.distinct("address.state", {
+      isActive: true,
+    });
+
+    const filteredStates = states
+      .filter((state) => state && state.trim())
+      .sort();
+
+    return res.status(200).json({
+      total: filteredStates.length,
+      states: filteredStates,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
+const storesByState = async (req, res) => {
+  try {
+    const { state } = req.params;
+
+    const stores = await StoreModel.find({
+      "address.state": {
+        $regex: `^${state}$`,
+        $options: "i",
+      },
+      isActive: true,
+    })
+      .populate("categoryId", "name image")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      total: stores.length,
+      stores,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
 module.exports = {
   registerAdmin,
   registerOwner,
@@ -1157,4 +1207,6 @@ module.exports = {
   verifyEmailOTP,
   storesBySubCategory,
   searchStoreNames,
+  allStates,
+  storesByState,
 };
