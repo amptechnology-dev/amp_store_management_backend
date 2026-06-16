@@ -3,29 +3,28 @@ const { model } = mongoose;
 
 const adsSchema = new mongoose.Schema(
   {
-    title: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    description: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    image: {
-      type: String,
+    storeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Store",
       required: true,
     },
-    redirectUrl: {
-      type: String,
-      default: "",
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product",
+      required: true,
     },
+
     rank: {
       type: Number,
       required: true,
       default: 1,
     },
+
+    expiryDate: {
+      type: Date,
+      required: true,
+    },
+
     isActive: {
       type: Boolean,
       default: true,

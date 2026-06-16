@@ -1,28 +1,26 @@
 const AdsModel = require("../model/ads.model");
+const ProductModel = require("../model/product.model");
 const { uploadToR2 } = require("../helper/upload");
 
 // CREATE ADS
 
 const createAds = async (req, res) => {
   try {
-    const { title,description, redirectUrl, rank } = req.body;
+    const { storeId, productId, rank, expiryDate } = req.body;
 
-    let image = "";
+    const product = await ProductModel.findById(productId);
 
-    const imageFile = req.files?.find((file) => file.fieldname === "image");
-
-    if (imageFile) {
-      const fileName = `amp-ads/${Date.now()}-${imageFile.originalname}`;
-
-      image = await uploadToR2(imageFile.buffer, fileName, imageFile.mimetype);
+    if (!product) {
+      return res.status(404).json({
+        message: "Product not found",
+      });
     }
 
     const ads = await AdsModel.create({
-      title,
-      description,
-      image,
-      redirectUrl,
+      storeId,
+      productId,
       rank: Number(rank),
+      expiryDate,
     });
 
     return res.status(201).json({
@@ -44,9 +42,20 @@ const allAds = async (req, res) => {
   try {
     const ads = await AdsModel.find({
       isActive: true,
-    }).sort({
-      rank: 1,
-    });
+      expiryDate: {
+        $gte: new Date(),
+      },
+    })
+      .populate({
+        path: "productId",
+        populate: {
+          path: "storeId",
+          select: "storeName",
+        },
+      })
+      .sort({
+        rank: 1,
+      });
 
     return res.status(200).json({
       total: ads.length,
@@ -70,6 +79,15 @@ const adsByRank = async (req, res) => {
     const ads = await AdsModel.find({
       rank: Number(rank),
       isActive: true,
+      expiryDate: {
+        $gte: new Date(),
+      },
+    }).populate({
+      path: "productId",
+      populate: {
+        path: "storeId",
+        select: "storeName",
+      },
     });
 
     return res.status(200).json({
@@ -91,7 +109,17 @@ const singleAds = async (req, res) => {
   try {
     const { adsId } = req.params;
 
-    const ads = await AdsModel.findById(adsId);
+    const ads = await AdsModel.findById(adsId)
+      .populate({
+        path: "productId",
+        select:
+          "name images description sellingPrice storeId isVerified isActive",
+        populate: {
+          path: "storeId",
+          select:
+            "storeName storeUniqueId images address contactNo whatsappNo",
+        },
+      });
 
     if (!ads) {
       return res.status(404).json({
@@ -125,25 +153,32 @@ const updateAds = async (req, res) => {
       });
     }
 
-    let image = ads.image;
+    if (req.body.productId) {
+      const product = await ProductModel.findById(
+        req.body.productId
+      );
 
-    const imageFile = req.files?.find((file) => file.fieldname === "image");
+      if (!product) {
+        return res.status(404).json({
+          message: "Product not found",
+        });
+      }
 
-    if (imageFile) {
-      const fileName = `amp-ads/${Date.now()}-${imageFile.originalname}`;
-
-      image = await uploadToR2(imageFile.buffer, fileName, imageFile.mimetype);
+      ads.productId = req.body.productId;
+      ads.storeId = product.storeId; 
     }
 
-    ads.title = req.body.title || ads.title;
-    ads.description = req.body.description || ads.description;
-    ads.redirectUrl = req.body.redirectUrl || ads.redirectUrl;
+    if (req.body.rank !== undefined) {
+      ads.rank = Number(req.body.rank);
+    }
 
-    ads.rank = req.body.rank || ads.rank;
+    if (req.body.expiryDate) {
+      ads.expiryDate = req.body.expiryDate;
+    }
 
-    ads.image = image;
-
-    ads.isActive = req.body.isActive ?? ads.isActive;
+    if (req.body.isActive !== undefined) {
+      ads.isActive = req.body.isActive;
+    }
 
     await ads.save();
 

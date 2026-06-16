@@ -12,7 +12,7 @@ const {
   deleteAds,
 } = require("../controller/ads.controller");
 
-router.post("/", verifyJwt, uploadMultiImages, createAds);
+router.post("/", verifyJwt, createAds);
 
 router.get("/", allAds);
 
@@ -20,7 +20,7 @@ router.get("/ads-by-rank/:rank", adsByRank);
 
 router.get("/:adsId", singleAds);
 
-router.put("/:adsId", verifyJwt, uploadMultiImages, updateAds);
+router.put("/:adsId", verifyJwt, updateAds);
 
 router.delete("/:adsId", verifyJwt, deleteAds);
 

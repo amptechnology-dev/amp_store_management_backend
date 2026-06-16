@@ -16,6 +16,7 @@ const sendStoreVerifyEmail = require("../helper/sendStoreVerifyEmail");
 const { sendPasswordSMS } = require("../helper/sendPasswordSMS.js");
 const sendEmailVerificationOTP = require("../helper/sendEmailVerificationOTP.js");
 const EmailVerifyModel = require("../model/otpverify.js");
+const RecentSearchModel = require("../model/recentSearch.model");
 
 const registerAdmin = async (req, res) => {
   try {
@@ -942,7 +943,24 @@ const storeWithProducts = async (req, res) => {
   try {
     const { storeId } = req.params;
 
-    if (req.user && req.user.role === "USER") {
+    if (req.user && req.user.role === "ADMIN") {
+      const kk = await RecentSearchModel.findOneAndUpdate(
+        {
+          userId: req.user.id,
+          storeId,
+        },
+        {
+          userId: req.user.id,
+          storeId,
+          updatedAt: new Date(),
+        },
+        {
+          upsert: true,
+          new: true,
+          setDefaultsOnInsert: true,
+        },
+      );
+      console.log("Recent search updated:", kk);
       const existingView = await StoreViewModel.findOne({
         storeId,
         userId: req.user.id,
@@ -1189,6 +1207,163 @@ const storesByState = async (req, res) => {
   }
 };
 
+const recentSearchStores = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const recentStores = await RecentSearchModel.find({
+      userId,
+    })
+      .populate({
+        path: "storeId",
+        populate: {
+          path: "categoryId",
+          select: "name image",
+        },
+      })
+      .sort({
+        updatedAt: -1,
+      })
+      .limit(20);
+
+    const stores = recentStores.map((item) => item.storeId).filter(Boolean);
+
+    return res.status(200).json({
+      total: stores.length,
+      stores,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
+const clearRecentSearches = async (req, res) => {
+  try {
+    await RecentSearchModel.deleteMany({
+      userId: req.user.id,
+    });
+
+    return res.status(200).json({
+      message: "Recent searches cleared successfully",
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
+const relatedStores = async (req, res) => {
+  try {
+    const { storeId } = req.params;
+
+    const currentStore = await StoreModel.findById(storeId);
+
+    if (!currentStore) {
+      return res.status(404).json({
+        message: "Store not found",
+      });
+    }
+
+    const stores = await StoreModel.find({
+      storeType: currentStore.storeType,
+
+      _id: {
+        $ne: storeId, // current store বাদ
+      },
+
+      isActive: true,
+    })
+      .sort({ viewCount: -1 })
+      .limit(10);
+
+    return res.status(200).json({
+      total: stores.length,
+      stores,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
+const nearbyStores = async (req, res) => {
+  try {
+    const { lat, long, radius = 5 } = req.query;
+
+    if (!lat || !long) {
+      return res.status(400).json({
+        message: "Latitude and Longitude are required",
+      });
+    }
+
+    const userLat = Number(lat);
+    const userLong = Number(long);
+    const maxDistance = Number(radius);
+
+    const stores = await StoreModel.find({
+      isActive: true,
+      isVerify: true,
+    });
+
+    const getDistance = (lat1, lon1, lat2, lon2) => {
+      const R = 6371;
+
+      const dLat = ((lat2 - lat1) * Math.PI) / 180;
+      const dLon = ((lon2 - lon1) * Math.PI) / 180;
+
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((lat1 * Math.PI) / 180) *
+          Math.cos((lat2 * Math.PI) / 180) *
+          Math.sin(dLon / 2) *
+          Math.sin(dLon / 2);
+
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+      return R * c;
+    };
+
+    const nearbyStores = stores
+      .map((store) => {
+        const distance = getDistance(
+          userLat,
+          userLong,
+          store.lat,
+          store.long
+        );
+
+        return {
+          ...store.toObject(),
+          distance: Number(distance.toFixed(2)),
+        };
+      })
+      .filter((store) => store.distance <= maxDistance)
+      .sort((a, b) => a.distance - b.distance);
+
+    return res.status(200).json({
+      total: nearbyStores.length,
+      radius: `${maxDistance} KM`,
+      stores: nearbyStores,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
 module.exports = {
   registerAdmin,
   registerOwner,
@@ -1209,4 +1384,8 @@ module.exports = {
   searchStoreNames,
   allStates,
   storesByState,
+  recentSearchStores,
+  clearRecentSearches,
+  relatedStores,
+  nearbyStores 
 };

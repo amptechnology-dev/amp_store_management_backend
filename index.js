@@ -33,6 +33,7 @@ const dashboardRoutes = require("./src/routes/dashboard.routes.js")
 const reviewRoutes = require("./src/routes/review.routes.js")
 const categoryRoutes = require("./src/routes/category.routes.js")
 const adsRoutes = require("./src/routes/ads.route.js")
+const storeActionRoutes = require("./src/routes/storeAction.routes.js")
 
 app.use("/api/register", registerRoutes)
 app.use("/api/login", loginRoutes)
@@ -40,6 +41,7 @@ app.use("/api/product", productRoutes)
 app.use("/api/review", reviewRoutes)
 app.use("/api/ads", adsRoutes)
 app.use("/api/category", categoryRoutes)
+app.use("/api/store-action", storeActionRoutes)
 // app.use("/api/dashboard", dashboardRoutes)
 
 const port = process.env.PORT || 8090

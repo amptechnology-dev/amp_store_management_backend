@@ -1,6 +1,6 @@
 const router = require("express").Router();
 
-const { registerAdmin, registerOwner, createUser, allStores, singleStore, updateStoreAndUser, deleteStoreAndUser, userBasedStores, publicAllStores, storeWithProducts, registerStoreOwner, verifyStoreStatus,createStore,updateStoreFeatured,verifyEmailOTP,storesBySubCategory,searchStoreNames,allStates,storesByState } = require("../controller/register.controller.js");
+const { registerAdmin, registerOwner, createUser, allStores, singleStore, updateStoreAndUser, deleteStoreAndUser, userBasedStores, publicAllStores, storeWithProducts, registerStoreOwner, verifyStoreStatus,createStore,updateStoreFeatured,verifyEmailOTP,storesBySubCategory,searchStoreNames,allStates,storesByState,recentSearchStores,clearRecentSearches,relatedStores,nearbyStores  } = require("../controller/register.controller.js");
 const verifyJwt = require("../middleware/verifiyUser.js");
 const authorize = require("../middleware/authorize.js");
 const { uploadMultiImages } = require("../middleware/multiMulter.js")
@@ -25,5 +25,9 @@ router.get("/stores-by-subcategory/:subCategoryId", storesBySubCategory);
 router.get("/search-store-names", searchStoreNames);
 router.get("/all-states", allStates);
 router.get("/stores-by-state/:state", storesByState);
+router.get("/recent-search-stores", verifyJwt, recentSearchStores);
+router.delete("/clear-recent-searches", verifyJwt, clearRecentSearches);
+router.get("/related-stores/:storeId", relatedStores);
+router.get("/nearby-stores", verifyJwt, nearbyStores);
 
 module.exports = router;
