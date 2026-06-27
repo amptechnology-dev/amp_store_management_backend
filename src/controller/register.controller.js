@@ -943,8 +943,8 @@ const storeWithProducts = async (req, res) => {
   try {
     const { storeId } = req.params;
 
-    if (req.user && req.user.role === "ADMIN") {
-      const kk = await RecentSearchModel.findOneAndUpdate(
+    if (req.user && ["USER", "STORE"].includes(req.user.role)) {
+      await RecentSearchModel.findOneAndUpdate(
         {
           userId: req.user.id,
           storeId,
@@ -960,7 +960,7 @@ const storeWithProducts = async (req, res) => {
           setDefaultsOnInsert: true,
         },
       );
-      console.log("Recent search updated:", kk);
+
       const existingView = await StoreViewModel.findOne({
         storeId,
         userId: req.user.id,
@@ -1335,12 +1335,7 @@ const nearbyStores = async (req, res) => {
 
     const nearbyStores = stores
       .map((store) => {
-        const distance = getDistance(
-          userLat,
-          userLong,
-          store.lat,
-          store.long
-        );
+        const distance = getDistance(userLat, userLong, store.lat, store.long);
 
         return {
           ...store.toObject(),
@@ -1387,5 +1382,5 @@ module.exports = {
   recentSearchStores,
   clearRecentSearches,
   relatedStores,
-  nearbyStores 
+  nearbyStores,
 };
